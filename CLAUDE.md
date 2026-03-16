@@ -27,6 +27,14 @@ uv run bench.py --base-url http://localhost:1234/v1 --model some-model
 
 No tests or linter configured. Single dependency: `httpx`.
 
+## Python Environment
+
+Use `uv` for all Python package management (not pip/pipx/brew). For CLI tools like mlx-lm:
+
+```bash
+uv tool install mlx-lm
+```
+
 ## Architecture
 
 Single module `bench.py` with two benchmark backends:

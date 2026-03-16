@@ -142,7 +142,10 @@ def bench_ollama_native(
         with httpx.stream(
             "POST", url, json=payload, timeout=httpx.Timeout(120.0)
         ) as response:
-            response.raise_for_status()
+            if response.status_code != 200:
+                response.read()
+                print(f"  HTTP error: {response.status_code} — {response.text[:200]}")
+                return None
             for line in response.iter_lines():
                 if not line:
                     continue
@@ -160,9 +163,6 @@ def bench_ollama_native(
                     completion_tokens = chunk.get("eval_count", 0)
                     prompt_tokens = chunk.get("prompt_eval_count", 0)
 
-    except httpx.HTTPStatusError as e:
-        print(f"  HTTP error: {e.response.status_code} — {e.response.text[:200]}")
-        return None
     except httpx.ConnectError:
         print(f"  Connection refused at {api_base} — is Ollama running?")
         return None
@@ -273,6 +273,51 @@ def bench_single(
     return bench_openai_compat(base_url, model, prompt_name, prompt, max_tokens, temperature)
 
 
+def ensure_ollama_model(base_url: str, model: str) -> bool:
+    """Check if an Ollama model is available locally; offer to pull if not."""
+    api_base = base_url.replace("/v1", "")
+    try:
+        r = httpx.post(f"{api_base}/api/show", json={"name": model}, timeout=5)
+        if r.status_code == 200:
+            return True
+    except httpx.ConnectError:
+        print(f"  Connection refused at {api_base} — is Ollama running?")
+        return False
+    except Exception:
+        pass
+
+    # Model not found — offer to pull
+    print(f"\n  Model '{model}' not found locally.")
+    try:
+        answer = input(f"  Pull '{model}' from Ollama? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+    if answer and answer not in ("y", "yes"):
+        print("  Skipping model.")
+        return False
+
+    print(f"  Pulling '{model}' (this may take a while)...")
+    try:
+        result = subprocess.run(
+            ["ollama", "pull", model],
+            timeout=3600,
+        )
+        if result.returncode == 0:
+            print(f"  Pull complete.")
+            return True
+        else:
+            print(f"  Pull failed (exit code {result.returncode}).")
+            return False
+    except FileNotFoundError:
+        print("  'ollama' command not found. Install Ollama from https://ollama.com")
+        return False
+    except subprocess.TimeoutExpired:
+        print("  Pull timed out.")
+        return False
+
+
 def run_benchmark(
     base_url: str,
     models: list[str],
@@ -288,6 +333,10 @@ def run_benchmark(
     all_results = []
 
     for model in models:
+        # For Ollama, check model availability and offer to pull
+        if is_ollama(base_url) and not ensure_ollama_model(base_url, model):
+            print(f"\n  Skipping '{model}' — not available.")
+            continue
         print(f"\n{'='*60}")
         print(f"Model: {model}")
         print(f"{'='*60}")

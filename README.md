@@ -37,6 +37,17 @@ uv run bench.py --base-url http://localhost:1234/v1 --model some-model
 | `--compare` | none | Compare saved JSON result files |
 | `--list` | — | List models on the server |
 
+## Auto-Pull Models
+
+When using Ollama, if a requested model isn't downloaded yet, the benchmark will offer to pull it automatically:
+
+```
+Model 'qwen3:32b' not found locally.
+Pull 'qwen3:32b' from Ollama? [Y/n]
+```
+
+No need to run `ollama pull` separately.
+
 ## How It Works
 
 The benchmark runs 4 prompts (short, medium, long, reasoning) across N iterations per model and reports:
@@ -66,6 +77,8 @@ Results are saved as JSON in `results/`.
 | M3 Max 48GB | qwen3:32b | Dense | 20 GB | mlx-lm | **18.9** | — | [@niemesrw](https://github.com/niemesrw) |
 | M3 Max 48GB | qwen3:30b-a3b | MoE | 18 GB | Ollama | **79.7** | 142ms | [@niemesrw](https://github.com/niemesrw) |
 | M3 Max 48GB | qwen3.5:27b | Dense | 24 GB | Ollama | **12.5** | 628ms | [@niemesrw](https://github.com/niemesrw) |
+| M5 Max 64GB | qwen2.5:32b (4-bit) | Dense | 20 GB | mlx-lm | **25.1** | — | [@niemesrw](https://github.com/niemesrw) |
+| M5 Max 64GB | qwen2.5:72b (4-bit) | Dense | 38 GB | mlx-lm | **11.7** | — | [@niemesrw](https://github.com/niemesrw) |
 
 ### Key Findings (M3 Max 48GB)
 
@@ -75,6 +88,13 @@ Results are saved as JSON in `results/`.
 - **MoE is the sweet spot** — `qwen3:30b-a3b` hits 80 tok/s (5x faster than dense 32B) with quality trained on 30B params.
 - **Ollama tuning knobs** (flash attention, context size, batch size) have zero impact on generation speed at 32B — the bottleneck is memory bandwidth, not software.
 - **qwen3.5 trades speed for quality** — 21% slower than qwen3:32b but meaningfully better reasoning.
+
+### Key Findings (M5 Max 64GB)
+
+- **M5 Max is ~45% faster** than M3 Max for the same 32B model via mlx-lm (25.1 vs 18.9 tok/s), reflecting the increased memory bandwidth.
+- **72B models are usable** — Qwen2.5-72B at 4-bit runs at ~12.7 tok/s sustained, a model that wouldn't fit comfortably in 48GB.
+- **Ollama does not yet support M5 Max** (as of v0.18.0) — Metal 4 backend crashes on model load. Use mlx-lm (`uv tool install mlx-lm`) as a workaround.
+- **mlx-lm serves an OpenAI-compatible API** — works with bench.py via `--base-url http://localhost:8080/v1`.
 
 ## Contributing Results
 
