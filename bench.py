@@ -105,6 +105,42 @@ def get_ollama_ps() -> str | None:
     return None
 
 
+def unload_all_ollama_models(base_url: str, keep: str | None = None) -> None:
+    """Unload every model currently loaded in Ollama, except `keep`.
+
+    Ensures a clean memory slate before benchmarking a model so that no
+    other model competes for RAM / memory bandwidth. Ollama unloads a model
+    by sending an empty request with `keep_alive: 0`.
+    """
+    api_base = base_url.replace("/v1", "")
+    try:
+        r = httpx.get(f"{api_base}/api/ps", timeout=10)
+        r.raise_for_status()
+        loaded = [m["name"] for m in r.json().get("models", [])]
+    except httpx.ConnectError:
+        print(f"  Connection refused at {api_base} — is Ollama running?")
+        return
+    except Exception as e:
+        print(f"  Could not list loaded models: {e}")
+        return
+
+    to_unload = [m for m in loaded if m != keep]
+    if not to_unload:
+        return
+
+    for name in to_unload:
+        print(f"  Unloading '{name}'...", end="", flush=True)
+        try:
+            httpx.post(
+                f"{api_base}/api/generate",
+                json={"model": name, "keep_alive": 0, "prompt": ""},
+                timeout=60,
+            )
+            print(" done")
+        except Exception as e:
+            print(f" FAILED ({e})")
+
+
 def bench_ollama_native(
     base_url: str,
     model: str,
@@ -340,6 +376,10 @@ def run_benchmark(
         print(f"\n{'='*60}")
         print(f"Model: {model}")
         print(f"{'='*60}")
+
+        # Ollama: unload every other loaded model so memory is free for this one
+        if is_ollama(base_url):
+            unload_all_ollama_models(base_url, keep=model)
 
         if warmup:
             print("  Warming up (loading model into memory)...")

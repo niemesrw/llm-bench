@@ -60,6 +60,10 @@ Two backends:
 - **Ollama native** (`/api/chat`, streaming) — auto-detected on port 11434. Supports `think: true/false` and Ollama-specific tuning options.
 - **OpenAI-compatible** (`/v1/chat/completions`, non-streaming) — for LM Studio, mlx-lm, vLLM, etc.
 
+### Clean Memory Between Models
+
+When using Ollama, before benchmarking each model the tool unloads every other model currently loaded in memory (via `keep_alive: 0`), so no other model competes for RAM / memory bandwidth. The model being benchmarked is left loaded.
+
 Results are saved as JSON in `results/`.
 
 ## Community Results
